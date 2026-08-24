@@ -10,3 +10,5 @@ dist/
 .env.local
 .env.*.local
 *.local.*
+
+yarn.lock
