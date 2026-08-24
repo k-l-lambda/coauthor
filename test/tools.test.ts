@@ -43,7 +43,7 @@ const bytes = () => readFileSync(ctx.project.draftPath);
 describe("read_draft", () => {
   it("returns a numbered slice and the total", () => {
     const out = readDraft.run({ from: 86, to: 88 }, ctx);
-    expect(out).toContain("正文共 105 段");
+    expect(out).toContain("The draft has 105 blocks");
     expect(out).toMatch(/86│/);
     expect(out).toContain("---");
     expect(out).toContain("太罗嗦了");
@@ -63,7 +63,7 @@ describe("read_setting", () => {
 
   it("lists available headings when the heading is unknown", () => {
     const out = readSetting.run({ file: "setting-notes.md", heading: "不存在的标题" }, ctx);
-    expect(out).toContain("现有标题");
+    expect(out).toContain("Available headings");
     expect(out).toContain("## 1. 球宇");
   });
 
@@ -88,7 +88,7 @@ describe("revise — the annotation close-out", () => {
     expect(text).not.toContain("\n---");
     expect(text).not.toContain("太罗嗦了");
     expect(text).toContain("北天这三个是本体");
-    expect(out).toContain("已写入 main.md");
+    expect(out).toContain("Wrote main.md");
     expect(text.split(/\r?\n/).filter((l) => l.trim() === "---")).toHaveLength(0);
   });
 
@@ -163,7 +163,7 @@ describe("expect guards against misaligned writes", () => {
 
   it("refuses to==from inverted", () => {
     expect(() => revise.run({ from: 88, to: 86, expect: "太罗嗦了", text: "x" }, ctx)).toThrow(
-      /不能小于/,
+      /cannot be less than/,
     );
   });
 });
@@ -179,7 +179,7 @@ describe("insert", () => {
 
   it("rejects empty text", () => {
     expect(() => insert.run({ after: 86, expect: "“这就要说到回像了", text: "  " }, ctx)).toThrow(
-      /没有可插入/,
+      /nothing to insert/,
     );
   });
 });
@@ -192,11 +192,11 @@ describe("append", () => {
     expect(text.endsWith("\r\n")).toBe(true);
     expect(text).not.toMatch(/\r\n\r\n\r\n$/);
     const out = readDraft.run({}, ctx);
-    expect(out).toContain("正文共 107 段");
+    expect(out).toContain("The draft has 107 blocks");
   });
 
   it("rejects empty text", () => {
-    expect(() => append.run({ text: "\n\n" }, ctx)).toThrow(/没有可追加/);
+    expect(() => append.run({ text: "\n\n" }, ctx)).toThrow(/nothing to append/);
   });
 });
 

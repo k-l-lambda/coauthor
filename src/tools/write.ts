@@ -6,7 +6,9 @@ import { appendEdit } from "../log/editlog.js";
 import { defineTool, type ToolContext } from "./index.js";
 
 const EXPECT_DESC =
-  "被定位那个自然段开头的至少 4 个字符，从正文原文照抄。序号对不上时写入会被拒绝，不会改错地方。";
+  "Copy at least 4 characters from the start of the targeted block exactly as it appears " +
+  "in the draft. If the ordinal no longer matches, the write is rejected instead of editing " +
+  "the wrong location.";
 
 /** Strip any `NNN│` prefix the model echoed back, and normalize line breaks. */
 function cleanIncoming(text: string): string[] {
@@ -68,26 +70,26 @@ function report(
   const r = renumber(a.before, a.after, anchor);
   const shift =
     r.delta === 0
-      ? "段落总数未变，后续序号不变。"
-      : `段落总数 ${a.before.length} → ${r.totalBlocks}（${r.delta > 0 ? "+" : ""}${r.delta}），` +
-        `第 ${anchor} 段之后的序号已移位。`;
-  return `已写入 ${ctx.project.draftName}。${shift}\n\n改动后该处的最新序号：\n\n${r.context}`;
+      ? "The total block count is unchanged; later ordinals stay the same."
+      : `Block count ${a.before.length} → ${r.totalBlocks} (${r.delta > 0 ? "+" : ""}${r.delta}); ` +
+        `ordinals after block ${anchor} have shifted.`;
+  return `Wrote ${ctx.project.draftName}. ${shift}\n\nCurrent ordinals around the edit:\n\n${r.context}`;
 }
 
 export const revise = defineTool({
   name: "revise",
   description:
-    "用 text 替换第 from 到第 to 个自然段（含两端）。text 传空字符串即删除这些段落。" +
-    "处理 `---` 附注时：from 取被批注段落的序号，to 取批注文字的序号，" +
-    "这样目标段、`---`、批注文字会在同一次操作中一起被替换，标记自动消失。",
+    "Replace blocks from `from` through `to`, inclusive. Pass an empty `text` to delete them. " +
+    "For a `---` annotation, set `from` to the annotated block and `to` to the note block " +
+    "so the target, separator, and note are replaced together and the annotation disappears.",
   schema: z.object({
-    from: z.number().int().min(1).describe("起始自然段序号（含）"),
-    to: z.number().int().min(1).describe("结束自然段序号（含）"),
+    from: z.number().int().min(1).describe("Starting block ordinal, inclusive"),
+    to: z.number().int().min(1).describe("Ending block ordinal, inclusive"),
     expect: z.string().describe(EXPECT_DESC),
-    text: z.string().describe("改写后的正文，不要带 NNN│ 序号前缀。段落之间用空行分隔。"),
+    text: z.string().describe("Replacement text without NNN│ ordinal prefixes; separate paragraphs with blank lines."),
   }),
   run: ({ from, to, expect, text }, ctx) => {
-    if (to < from) throw new Error(`to (${to}) 不能小于 from (${from})。`);
+    if (to < from) throw new Error(`to (${to}) cannot be less than from (${from}).`);
     const a = apply(ctx, (file, blocks) => {
       assertExpect(blocks, from, expect);
       const first = blockAt(blocks, from);
@@ -109,15 +111,17 @@ export const revise = defineTool({
 
 export const insert = defineTool({
   name: "insert",
-  description: "在第 after 个自然段之后插入新段落。",
+  description: "Insert new paragraphs after block `after`.",
   schema: z.object({
-    after: z.number().int().min(1).describe("在这个序号的自然段之后插入"),
+    after: z.number().int().min(1).describe("Block ordinal after which to insert"),
     expect: z.string().describe(EXPECT_DESC),
-    text: z.string().describe("要插入的正文，不要带 NNN│ 序号前缀。段落之间用空行分隔。"),
+    text: z
+      .string()
+      .describe("Text to insert without NNN│ ordinal prefixes; separate paragraphs with blank lines."),
   }),
   run: ({ after, expect, text }, ctx) => {
     const body = bodyLines(text);
-    if (!body.length) throw new Error("text 为空，没有可插入的内容。");
+    if (!body.length) throw new Error("text is empty; there is nothing to insert.");
     const a = apply(ctx, (file, blocks) => {
       const anchor = assertExpect(blocks, after, expect);
       return spliceLines(file, anchor.to, anchor.to, [
@@ -132,13 +136,16 @@ export const insert = defineTool({
 
 export const append = defineTool({
   name: "append",
-  description: "追加到正文末尾。新增章节时把 ## 标题一并写在 text 里。",
+  description:
+    "Append text to the end of the draft. Include an `##` heading in `text` when starting a new chapter.",
   schema: z.object({
-    text: z.string().describe("要追加的正文，不要带 NNN│ 序号前缀。段落之间用空行分隔。"),
+    text: z
+      .string()
+      .describe("Text to append without NNN│ ordinal prefixes; separate paragraphs with blank lines."),
   }),
   run: ({ text }, ctx) => {
     const body = bodyLines(text);
-    if (!body.length) throw new Error("text 为空，没有可追加的内容。");
+    if (!body.length) throw new Error("text is empty; there is nothing to append.");
     const a = apply(ctx, (file) => {
       const lastIdx = file.lines.length - 1;
       const tail = file.lines[lastIdx];

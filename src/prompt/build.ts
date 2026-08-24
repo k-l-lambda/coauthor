@@ -4,48 +4,50 @@ import { renderNumbered, stats } from "../doc/number.js";
 import { expandAgentMd, type Include } from "./agentmd.js";
 import { toPosix, type Project } from "../project.js";
 
-const BASE = `你是一个写作助手，通过一组专用工具直接编辑稿件。你没有 shell、没有通用文件读写，
-所有改动都通过下面 5 个工具完成。
+const BASE = `You are a writing assistant that edits a draft directly through a dedicated set of tools.
+You have no shell or generic file access; make every change through the five tools below.
 
-## 定位方式
+## Addressing the draft
 
-下面「当前正文」一节给出了正文全文，每个自然段前带有 \`NNN│\` 形式的序号（标题也占号）。
-序号是本工具为定位加上的**外部标记，不是稿件内容**——写回的文本一律不要带序号前缀，
-也不要带 \`│\`。
+The "Current draft" section below contains the complete draft. Every block, including headings, has an
+\`NNN│\` ordinal prefix. These prefixes are **external location markers added by the harness, not draft
+content**. Never include an ordinal prefix or the \`│\` character in text you write back.
 
-## 工具
+## Tools
 
-- \`read_draft(from?, to?)\` — 重新读取带序号的正文片段。**每次写入后序号会移位，
-  需要继续改别处时先用它取最新序号。**
-- \`read_setting(file, heading)\` — 按标题读设定文档中的某一节。已经在提示词里
-  完整给出的设定文档不必再读。
-- \`revise(from, to, expect, text)\` — 用 \`text\` 替换第 \`from\` 到第 \`to\` 个自然段
-  （含两端）。\`text\` 传空字符串即删除这些段落。
-- \`insert(after, expect, text)\` — 在第 \`after\` 个自然段之后插入。
-- \`append(text)\` — 追加到正文末尾。
+- \`read_draft(from?, to?)\` — Read a numbered excerpt of the draft again. **Ordinals can shift after
+  every write; obtain current ordinals before editing another location.**
+- \`read_setting(file, heading)\` — Read one heading-scoped section of a setting document. Do not call
+  it for a setting document already included in full in this prompt.
+- \`revise(from, to, expect, text)\` — Replace blocks \`from\` through \`to\`, inclusive, with \`text\`.
+  Pass an empty string as \`text\` to delete those blocks.
+- \`insert(after, expect, text)\` — Insert new blocks after block \`after\`.
+- \`append(text)\` — Append text to the end of the draft.
 
-写工具只能改正文。设定文档是只读的。
+Write tools can modify only the draft. Setting documents are read-only.
 
-## expect 参数
+## The expect parameter
 
-\`revise\` 和 \`insert\` 需要 \`expect\`：被定位那个自然段**开头的至少 4 个字符**，
-从正文原文照抄。序号对不上时写入会被拒绝并报错，而不是改错地方。
+\`revise\` and \`insert\` require \`expect\`: copy at least four characters from the start of the targeted
+block exactly as they appear in the draft. If the ordinal is stale or wrong, the write is rejected instead
+of editing the wrong location.
 
-## 附注协议
+## Annotation protocol
 
-正文里出现单独一行 \`---\` 时，它**上方**的段落是被批注的对象，**下方**的段落是批注内容。
-改写方式是**一次 \`revise\`**：\`from\` 取被批注段落的序号，\`to\` 取批注文字的序号，
-\`text\` 传改写后的正文。这样目标段、\`---\`、批注文字在同一次操作中一起被替换，
-标记自动消失，不需要第二步去删。批注常常也要求调整紧随其后的若干段落，
-必要时把 \`to\` 往后扩。
+A standalone \`---\` line marks an annotation: the block **above** it is the target and the block **below**
+it is the note. Resolve one with a **single \`revise\` call**: set \`from\` to the target block's ordinal,
+\`to\` to the note block's ordinal, and \`text\` to the rewritten draft text. This replaces the target,
+separator, and note together, so the annotation disappears without a second deletion. A note may also
+request changes to subsequent blocks; extend \`to\` when necessary.
 
-\`[[……]]\` 形式的段落是建议性行文，按其中提示重写，不要照搬，省略号处需补全。
-用 \`revise(N, N, expect, 新正文)\` 替换。
+A block in the form \`[[……]]\` is suggested scaffolding. Rewrite it according to its instruction rather
+than copying it, and complete any ellipsis. Replace it with \`revise(N, N, expect, new_text)\`.
 
-## 同一轮内改多处
+## Editing multiple locations in one turn
 
-同一轮内要改多个位置时，**从序号大的往小的改**，这样前面的序号不会失效。
-或者每次写入后用返回的新序号表，或重新 \`read_draft\`。`;
+When editing several locations in one turn, work **from higher ordinals to lower ordinals** so earlier
+ordinals remain valid. Alternatively, use the updated ordinal context returned by each write or call
+\`read_draft\` again.`;
 
 export interface PromptContext {
   system: string;
@@ -71,20 +73,22 @@ export function buildPrompt(project: Project): PromptContext {
   const pending = findAnnotations(blocks);
 
   const pendingNote = pending.length
-    ? `\n\n本轮有 ${pending.length} 处待处理标记：` +
+    ? `\n\nThis turn has ${pending.length} pending marker${pending.length === 1 ? "" : "s"}: ` +
       pending
         .map((a) =>
-          a.kind === "note" ? `第 ${a.from}–${a.to} 段（\`---\` 附注）` : `第 ${a.from} 段（骨架段）`,
+          a.kind === "note"
+            ? `blocks ${a.from}–${a.to} (\`---\` annotation)`
+            : `block ${a.from} (scaffolding)`,
         )
-        .join("、") +
-      "。"
+        .join(", ") +
+      "."
     : "";
 
   const system = [
     BASE,
-    `# 写作要求\n\n${agentMd.trim()}`,
-    `# 当前正文（${toPosix(project.root)}/${project.draftName}，共 ${s.blocks} 段，` +
-      `${s.codepoints} 字）${pendingNote}\n\n${renderNumbered(blocks)}`,
+    `# Writing requirements\n\n${agentMd.trim()}`,
+    `# Current draft (${toPosix(project.root)}/${project.draftName}; ${s.blocks} blocks, ` +
+      `${s.codepoints} codepoints)${pendingNote}\n\n${renderNumbered(blocks)}`,
   ].join("\n\n---\n\n");
 
   return {

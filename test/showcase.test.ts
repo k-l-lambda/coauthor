@@ -197,7 +197,7 @@ describe("showcase exercises includes and read_setting together", () => {
       { file: "glossary.md", heading: "不存在的标题" },
       { project: copy() },
     ) as string;
-    expect(out).toContain("现有标题");
+    expect(out).toContain("Available headings");
     expect(out).toContain("主记录仪");
   });
 

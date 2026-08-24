@@ -19,20 +19,24 @@ const program = new Command();
 program
   .name("coauthor")
   .description("Creative-writing agent harness with a closed, document-model-aware tool surface")
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("-d, --draft <file>", "draft file name", DEFAULT_DRAFT_FILE);
+
+/** Resolve a global option from either the root action or a subcommand action. */
+function draftFrom(command: Command): string {
+  return (command.optsWithGlobals() as { draft?: string }).draft ?? DEFAULT_DRAFT_FILE;
+}
 
 program
   .command("dev-prompt", { hidden: true })
   .description("Print the assembled system prompt and exit (no model call)")
   .argument("[dir]", "writing project directory", ".")
   .option("--stats-only", "print only the size summary")
-  .option("-d, --draft <file>", "draft file name", DEFAULT_DRAFT_FILE)
-  .action((dir: string, opts: { statsOnly?: boolean; draft: string }, command: Command) => {
+  .action((dir: string, opts: { statsOnly?: boolean }, command: Command) => {
     loadEnvLocal(dir);
-    const options = command.parent?.opts() as { statsOnly?: boolean; draft?: string };
-    const project = openProject(dir, options.draft ?? DEFAULT_DRAFT_FILE);
+    const project = openProject(dir, draftFrom(command));
     const ctx = buildPrompt(project);
-    if (!options.statsOnly) console.log(ctx.system);
+    if (!opts.statsOnly) console.log(ctx.system);
     const sys = Array.from(ctx.system).length;
     console.error(
       chalk.dim(
@@ -69,11 +73,9 @@ program
   .command("check")
   .description("Validate a writing project and show what the agent would see (no model call)")
   .argument("[dir]", "writing project directory", ".")
-  .option("-d, --draft <file>", "draft file name", DEFAULT_DRAFT_FILE)
-  .action((dir: string, opts: { draft: string }, command: Command) => {
-    const options = command.parent?.opts() as { draft?: string };
+  .action((dir: string, _opts: object, command: Command) => {
     const env = loadEnvLocal(dir);
-    const project = openProject(dir, options.draft ?? DEFAULT_DRAFT_FILE);
+    const project = openProject(dir, draftFrom(command));
     const ctx = buildPrompt(project);
     const ok = chalk.green("ok");
     const warn = chalk.yellow("!");
@@ -192,12 +194,10 @@ program
 // not line up and `dir` arrives undefined.
 program
   .argument("[dir]", "writing project directory", ".")
-  .option("-d, --draft <file>", "draft file name", DEFAULT_DRAFT_FILE)
-  .action(async (dir: string, opts: { draft: string }, command: Command) => {
-    const options = command.parent?.opts() as { draft?: string };
+  .action(async (dir: string, _opts: object, command: Command) => {
     const env = loadEnvLocal(dir);
     const { startRepl } = await import("./repl.js");
-    await startRepl(openProject(dir, options.draft ?? DEFAULT_DRAFT_FILE), env);
+    await startRepl(openProject(dir, draftFrom(command)), env);
   });
 
 try {

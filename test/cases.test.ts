@@ -44,7 +44,7 @@ describe.each(cases)("case: %s", (name) => {
   it("assembles a prompt without throwing", () => {
     const { project } = copyCase(name);
     const ctx = buildPrompt(project);
-    expect(ctx.system).toContain("# 当前正文");
+    expect(ctx.system).toContain("# Current draft");
     expect(ctx.blocks.length).toBeGreaterThan(0);
   });
 
