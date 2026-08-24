@@ -1,0 +1,10 @@
+# This project's correctness depends on exact line endings, so pin them rather
+# than leaving it to the ambient core.autocrlf.
+* text=auto eol=lf
+*.md text eol=lf
+
+# Test fixtures are exempt. Their line endings are the thing under test — a CRLF
+# fixture normalized to LF on commit would silently stop testing CRLF handling,
+# and would come back as LF in a fresh clone. `-text` disables all conversion, so
+# these files round-trip byte for byte.
+test/cases/** -text

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.coauthor/
+.fixture/
+
+# Local configuration and secrets. `.env.local` needs its own rule: the
+# `*.local.*` pattern below requires a suffix after `.local.` and does not match a
+# name that ends there, so without this line a file holding an API token would be
+# committed.
+.env.local
+.env.*.local
+*.local.*
