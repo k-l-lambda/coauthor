@@ -76,6 +76,18 @@ describe("openProject with a custom draft", () => {
     expect(() => openProject(dir)).toThrow(/--draft/);
   });
 
+  it("uses a distinct edit log for each draft name", () => {
+    const dir = projectWith({
+      [AGENT_FILE]: AGENT,
+      "main.md": DRAFT,
+      "chapter-3.md": DRAFT,
+    });
+    expect(openProject(dir).logPath).toBe(join(resolve(dir), ".coauthor", "main.md.edit-log.md"));
+    expect(openProject(dir, "chapter-3.md").logPath).toBe(
+      join(resolve(dir), ".coauthor", "chapter-3.md.edit-log.md"),
+    );
+  });
+
   it("creates a missing custom draft as an empty file", () => {
     const dir = projectWith({ [AGENT_FILE]: AGENT, "main.md": DRAFT });
     const project = openProject(dir, "new-draft.md");

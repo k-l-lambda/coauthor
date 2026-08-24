@@ -168,9 +168,11 @@ Every turn is a fresh session — nothing accumulates. The system prompt is rebu
 from disk each time, so it always reflects the current files and the previous turn's
 writes are simply visible in the next one.
 
-There are no write confirmations. Each mutation appends a unified diff to
-`.coauthor/edit-log.md`; `/log` in the REPL shows recent entries. Review happens
-after the fact rather than interrupting the writing.
+There are no write confirmations. Each mutation appends a unified diff to a draft-specific
+log under `.coauthor/`: `main.md` uses `main.md.edit-log.md`, while a draft selected as
+`chapter-one.md` uses `chapter-one.md.edit-log.md`. `/log` in the REPL shows recent entries
+for the currently selected draft. Review happens after the fact rather than interrupting the
+writing.
 
 ## Notes
 

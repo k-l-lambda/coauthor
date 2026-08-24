@@ -69,5 +69,11 @@ export function openProject(dir: string, draftFile: string = DEFAULT_DRAFT_FILE)
     writeFileSync(draftPath, "", { encoding: "utf8", flag: "wx" });
   }
 
-  return { root, agentPath, draftPath, draftName, logPath: join(root, ".coauthor", "edit-log.md") };
+  return {
+    root,
+    agentPath,
+    draftPath,
+    draftName,
+    logPath: join(root, ".coauthor", `${draftName}.edit-log.md`),
+  };
 }
