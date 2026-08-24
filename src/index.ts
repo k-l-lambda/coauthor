@@ -70,6 +70,16 @@ function source(env: EnvLoad, key: string): string {
 }
 
 program
+  .command("sys")
+  .description("Print the assembled LLM system prompt and exit (no model call)")
+  .argument("[dir]", "writing project directory", ".")
+  .action((dir: string, _opts: object, command: Command) => {
+    loadEnvLocal(dir);
+    const project = openProject(dir, draftFrom(command));
+    console.log(buildPrompt(project).system);
+  });
+
+program
   .command("check")
   .description("Validate a writing project and show what the agent would see (no model call)")
   .argument("[dir]", "writing project directory", ".")

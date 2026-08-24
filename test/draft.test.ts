@@ -171,6 +171,23 @@ describe("the --draft CLI option", () => {
     expect(out).toContain("chapter-3.md");
   });
 
+  it.runIf(existsSync(cli))("sys prints the assembled prompt for the current directory", () => {
+    const dir = projectWith({ [AGENT_FILE]: AGENT, "main.md": DRAFT });
+    const out = run(["sys"], dir);
+    expect(out).toContain("# Writing requirements");
+    expect(out).toContain("# Current draft");
+    expect(out).toContain("第一段。");
+  });
+
+  it.runIf(existsSync(cli))("sys honours an explicit directory and custom draft", () => {
+    const cwd = projectWith({ [AGENT_FILE]: AGENT, "main.md": DRAFT });
+    const dir = projectWith({ [AGENT_FILE]: AGENT, "chapter-3.md": "自定义正文。\n" });
+    const out = run(["sys", dir, "--draft", "chapter-3.md"], cwd);
+    expect(out).toContain("chapter-3.md");
+    expect(out).toContain("自定义正文。");
+    expect(out).not.toContain("第一段。");
+  });
+
   it.runIf(existsSync(cli))("fails with a clear message for a path", () => {
     const dir = projectWith({ [AGENT_FILE]: AGENT, "main.md": DRAFT });
     expect(() => run(["check", dir, "--draft", "../x.md"], dir)).toThrow(/not a path/);

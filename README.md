@@ -10,7 +10,8 @@ than on line offsets and marker bookkeeping.
 npm install && npm run build
 
 coauthor check path/to/project        # validate the project, no model call
-coauthor dev-prompt path/to/project   # print the assembled system prompt
+coauthor sys path/to/project          # print the assembled LLM system prompt
+coauthor dev-prompt path/to/project   # print the prompt plus development statistics
 coauthor path/to/project              # start the REPL
 ```
 
