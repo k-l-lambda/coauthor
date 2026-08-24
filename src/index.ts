@@ -76,7 +76,8 @@ program
   .action((dir: string, _opts: object, command: Command) => {
     loadEnvLocal(dir);
     const project = openProject(dir, draftFrom(command));
-    console.log(buildPrompt(project).system);
+    const system = buildPrompt(project).system;
+    console.log(`${system}\n\n[system prompt: ${Array.from(system).length} codepoints]`);
   });
 
 program

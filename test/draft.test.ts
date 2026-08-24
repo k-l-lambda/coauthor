@@ -76,9 +76,11 @@ describe("openProject with a custom draft", () => {
     expect(() => openProject(dir)).toThrow(/--draft/);
   });
 
-  it("says the name came from --draft when that file is missing", () => {
+  it("creates a missing custom draft as an empty file", () => {
     const dir = projectWith({ [AGENT_FILE]: AGENT, "main.md": DRAFT });
-    expect(() => openProject(dir, "nope.md")).toThrow(/nope\.md.*--draft/s);
+    const project = openProject(dir, "new-draft.md");
+    expect(project.draftName).toBe("new-draft.md");
+    expect(readFileSync(project.draftPath, "utf8")).toBe("");
   });
 
   it("rejects a path before touching the filesystem", () => {
@@ -165,6 +167,13 @@ describe("the --draft CLI option", () => {
     expect(out).toContain("(--draft)");
   });
 
+  it.runIf(existsSync(cli))("check creates a missing custom draft", () => {
+    const dir = projectWith({ [AGENT_FILE]: AGENT, "main.md": DRAFT });
+    const out = run(["check", dir, "--draft", "new-draft.md"], dir);
+    expect(out).toContain("new-draft.md");
+    expect(readFileSync(join(dir, "new-draft.md"), "utf8")).toBe("");
+  });
+
   it.runIf(existsSync(cli))("dev-prompt honours the short form -d", () => {
     const dir = projectWith({ [AGENT_FILE]: AGENT, "chapter-3.md": DRAFT });
     const out = run(["dev-prompt", dir, "-d", "chapter-3.md"], dir);
@@ -177,6 +186,7 @@ describe("the --draft CLI option", () => {
     expect(out).toContain("# Writing requirements");
     expect(out).toContain("# Current draft");
     expect(out).toContain("第一段。");
+    expect(out).toMatch(/\[system prompt: \d+ codepoints\]/);
   });
 
   it.runIf(existsSync(cli))("sys honours an explicit directory and custom draft", () => {

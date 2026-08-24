@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { resolve, join, basename } from "node:path";
 
 const BACKSLASH = String.fromCharCode(92);
@@ -61,13 +61,12 @@ export function openProject(dir: string, draftFile: string = DEFAULT_DRAFT_FILE)
     );
   }
   if (!existsSync(draftPath)) {
-    // Name the flag when the default was used, since the fix is usually to pass it
-    // rather than to rename the file.
-    throw new Error(
-      draftName === DEFAULT_DRAFT_FILE
-        ? `No ${draftName} in ${root}. Name the draft ${draftName}, or pass --draft <file>.`
-        : `No ${draftName} in ${root}, as given by --draft.`,
-    );
+    if (draftName === DEFAULT_DRAFT_FILE) {
+      throw new Error(
+        `No ${draftName} in ${root}. Name the draft ${draftName}, or pass --draft <file>.`,
+      );
+    }
+    writeFileSync(draftPath, "", { encoding: "utf8", flag: "wx" });
   }
 
   return { root, agentPath, draftPath, draftName, logPath: join(root, ".coauthor", "edit-log.md") };

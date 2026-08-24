@@ -34,9 +34,11 @@ coauthor dev-prompt --draft chapter-one.md path/to/project
 ```
 
 The selected filename is used consistently by the prompt, read/write tools, validation,
-and edit log. Draft names must be plain filenames inside the project; path traversal,
-directory paths, and `AGENT.md` are rejected. Write tools still omit the filename because
-they always operate on the selected draft.
+and edit log. If a filename explicitly selected with `--draft` does not exist, coauthor
+creates it as an empty file. The default `main.md` must already exist, so an omitted flag
+cannot silently create a draft in the wrong directory. Draft names must be plain filenames
+inside the project; path traversal, directory paths, and `AGENT.md` are rejected. Write tools
+still omit the filename because they always operate on the selected draft.
 
 ## Configuration
 
