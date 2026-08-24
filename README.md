@@ -18,8 +18,24 @@ During development use `npm run dev -- <args>` in place of `coauthor`.
 
 A writing project is a directory containing:
 
-- `main.md` — the draft. Fixed by convention, so write tools take no filename.
+- `main.md` — the default draft filename.
 - `AGENT.md` — the task in plain language; doubles as the system prompt.
+
+### Selecting the draft file
+
+The default draft is `main.md`. Use the global `--draft` (or `-d`) option when a project
+uses another plain filename:
+
+```sh
+coauthor --draft chapter-one.md path/to/project
+coauthor check --draft chapter-one.md path/to/project
+coauthor dev-prompt --draft chapter-one.md path/to/project
+```
+
+The selected filename is used consistently by the prompt, read/write tools, validation,
+and edit log. Draft names must be plain filenames inside the project; path traversal,
+directory paths, and `AGENT.md` are rejected. Write tools still omit the filename because
+they always operate on the selected draft.
 
 ## Configuration
 
