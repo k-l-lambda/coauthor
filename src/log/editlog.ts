@@ -13,6 +13,15 @@ export interface EditRecord {
   after: string;
 }
 
+/** Local time, not UTC: the journals are read by the author, not a machine. */
+export function localStamp(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
 /**
  * Append a unified diff for one mutation. This is the review mechanism in place of
  * interactive confirmation: writes land immediately and the journal is what the
@@ -33,12 +42,7 @@ export function appendEdit(logPath: string, rec: EditRecord, draftName = "main.m
   const hunk = patch.indexOf("@@");
   const stripped = hunk < 0 ? patch : patch.slice(hunk);
   const body = stripped.replace(TRAILING_WS, EMPTY);
-  // Local time, not UTC: this journal is read by the author, not a machine.
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const stamp =
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const stamp = localStamp();
   const entry =
     `\n## ${stamp} · ${draftName} · ${rec.tool} · ${rec.where}\n\n` +
     "```diff\n" +

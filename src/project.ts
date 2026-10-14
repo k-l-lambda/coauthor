@@ -19,6 +19,8 @@ export interface Project {
   /** The draft's file name, for prompts, logs and tool messages. */
   draftName: string;
   logPath: string;
+  /** Raw stream traces, written when a model stream breaks protocol. Not per draft. */
+  streamLogPath: string;
 }
 
 /**
@@ -75,5 +77,6 @@ export function openProject(dir: string, draftFile: string = DEFAULT_DRAFT_FILE)
     draftPath,
     draftName,
     logPath: join(root, ".coauthor", `${draftName}.edit-log.md`),
+    streamLogPath: join(root, ".coauthor", "stream-debug.log.md"),
   };
 }

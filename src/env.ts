@@ -11,6 +11,7 @@ export const KNOWN_VARS = [
   "COAUTHOR_MODEL",
   "COAUTHOR_MAX_TOKENS",
   "COAUTHOR_EFFORT",
+  "COAUTHOR_DEBUG",
 ] as const;
 
 /**
@@ -247,6 +248,11 @@ export interface Resolved {
   thinkingBudget: number;
   /** Set when a level was requested but had to be reduced or refused. */
   effortNote: string | null;
+  /**
+   * COAUTHOR_DEBUG: trace every model stream to the project's stream log, not only
+   * the ones that break protocol. Any value but empty, 0, false, off or no enables it.
+   */
+  debug: boolean;
 }
 
 /**
@@ -303,5 +309,8 @@ export function resolveConfig(): Resolved {
     effortInvalid: raw !== undefined && !valid ? (process.env.COAUTHOR_EFFORT ?? null) : null,
     thinkingBudget: budget,
     effortNote: note,
+    debug: !["", "0", "false", "off", "no"].includes(
+      (process.env.COAUTHOR_DEBUG ?? "").trim().toLowerCase(),
+    ),
   };
 }

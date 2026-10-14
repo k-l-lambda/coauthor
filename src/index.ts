@@ -187,6 +187,12 @@ program
     if (cfg.effortNote) {
       console.log(`${warn}   effort            ${chalk.dim(cfg.effortNote)}`);
     }
+    if (cfg.debug) {
+      console.log(
+        `${ok}  debug             every stream traced to .coauthor/stream-debug.log.md ` +
+          source(env, "COAUTHOR_DEBUG"),
+      );
+    }
 
     // Naming these explicitly is the point of the COAUTHOR_ prefix: coauthor reads
     // only COAUTHOR_*, so a leftover ANTHROPIC_* in the shell would otherwise look

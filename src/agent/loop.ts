@@ -6,6 +6,9 @@ import { readDraft, readSetting } from "../tools/read.js";
 import { revise, insert, append } from "../tools/write.js";
 import type { Project } from "../project.js";
 import { ENV_FILE, resolveConfig, type EnvLoad } from "../env.js";
+import { appendStreamDump } from "../log/streamlog.js";
+import { toPosix } from "../project.js";
+import { consumeStream, StreamError } from "./stream.js";
 
 export const TOOLS: ToolDef[] = [readDraft, readSetting, revise, insert, append] as ToolDef[];
 
@@ -20,14 +23,19 @@ export interface TurnHooks {
   onToolError: (name: string, message: string) => void;
   onEdit: (summary: string) => void;
   onStep?: (step: number) => void;
+  /** A tolerated stream deviation, already recorded in the stream log. */
+  onNotice?: (message: string) => void;
 }
 
 export interface Model {
   client: Anthropic;
   model: string;
+  baseUrl: string;
   maxTokens: number;
   /** Tokens for extended thinking, 0 to leave the parameter off entirely. */
   thinkingBudget: number;
+  /** Trace every stream, not only the ones that break protocol. */
+  debug: boolean;
 }
 
 export function createModel(env?: EnvLoad): Model {
@@ -53,9 +61,136 @@ export function createModel(env?: EnvLoad): Model {
   return {
     client: new Anthropic({ apiKey: cfg.token, baseURL: cfg.baseUrl }),
     model: cfg.model,
+    baseUrl: cfg.baseUrl,
     maxTokens: cfg.maxTokens,
     thinkingBudget: cfg.thinkingBudget,
+    debug: cfg.debug,
   };
+}
+
+/**
+ * Attempts per step. A retry re-sends the same request, so it is safe: no tool from
+ * a failed attempt has run, and the draft is untouched until the tool loop.
+ */
+const MAX_ATTEMPTS = 3;
+
+function stackHead(e: unknown): string {
+  const err = e as Error;
+  const frames = (err?.stack ?? "").split("\n").slice(1, 9).join("\n");
+  // The constructor name, not err.name: SDK errors all report name "Error", and the
+  // class (BadRequestError, APIConnectionError, …) is the useful part.
+  const kind = err?.constructor?.name ?? err?.name ?? typeof e;
+  return `${kind}: ${err?.message ?? String(e)}\n${frames}`;
+}
+
+/**
+ * One model call, accumulated by consumeStream, with every failure written to the
+ * stream log before it surfaces — an error with no trace behind it cannot be
+ * diagnosed afterwards, which is how the last occurrence went unexplained.
+ *
+ * Retried, up to MAX_ATTEMPTS:
+ * - a stream that broke mid-way (StreamError);
+ * - a stream whose tool call arrived cut short, which a proxy reports as a clean
+ *   end_turn — acting on it would send the model a validation error for a call it
+ *   never finished making;
+ * - an error raised by an SSE `error` event, which carries no HTTP status.
+ * An HTTP error with a status is not retried here: the SDK already retries the
+ * transient ones, and the rest are deterministic.
+ */
+async function requestStep(
+  model: Model,
+  project: Project,
+  step: number,
+  req: { system: string; tools: Anthropic.Tool[]; messages: Anthropic.MessageParam[] },
+  hooks: TurnHooks,
+): Promise<Anthropic.Message> {
+  const log = toPosix(project.streamLogPath);
+  for (let attempt = 1; ; attempt++) {
+    const last = attempt >= MAX_ATTEMPTS;
+    const retry = (why: string) => {
+      hooks.onNotice?.(`${why}; retrying step (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+    };
+    let http: { status?: number; headers?: Headers } | undefined;
+    const dump = (reason: string, trace: string, anomalies: string[]) =>
+      appendStreamDump(project.streamLogPath, {
+        reason: attempt > 1 ? `${reason} · attempt ${attempt}` : reason,
+        model: model.model,
+        baseUrl: model.baseUrl,
+        step,
+        status: http?.status,
+        headers: http?.headers,
+        anomalies,
+        trace,
+      });
+
+    try {
+      // `thinking` is omitted entirely when off, not sent as {type:"disabled"}: the
+      // base URL may be a proxy serving a non-Claude model that rejects the field.
+      //
+      // Raw events rather than messages.stream(): the SDK's accumulator throws on the
+      // first out-of-order event, and proxies do emit them. consumeStream recovers
+      // and keeps a trace; see stream.ts.
+      const { data: events, response } = await model.client.messages
+        .create({
+          model: model.model,
+          max_tokens: model.maxTokens,
+          ...req,
+          stream: true,
+          ...(model.thinkingBudget
+            ? { thinking: { type: "enabled" as const, budget_tokens: model.thinkingBudget } }
+            : {}),
+        })
+        .withResponse();
+      http = response;
+
+      const result = await consumeStream(events, {
+        onText: hooks.onText,
+        onThinking: hooks.onThinking,
+      });
+      if (result.anomalies.length || model.debug) {
+        dump(
+          result.anomalies.length ? "protocol anomalies tolerated" : "debug trace",
+          result.trace.text(),
+          result.anomalies,
+        );
+      }
+      for (const a of result.anomalies) hooks.onNotice?.(a);
+      if (result.truncated && !last) {
+        retry("tool call arrived incomplete");
+        continue;
+      }
+      return result.message;
+    } catch (e) {
+      if (e instanceof StreamError) {
+        dump(`stream error: ${e.message}`, `${e.trace.text()}\n\n${stackHead(e.cause ?? e)}`, []);
+        if (!last) {
+          retry(`stream broke: ${e.message}`);
+          continue;
+        }
+        throw new Error(`${e.message}\n  raw stream trace: ${log}`);
+      }
+      // Not a stream fault: an HTTP error, a connection failure, or a bug. Logged
+      // with its class and stack, so the source is never a guess.
+      const status = e instanceof Anthropic.APIError ? e.status : undefined;
+      if (e instanceof Anthropic.APIError && !http && e.headers) {
+        http = { status: e.status, headers: e.headers };
+      }
+      const body =
+        e instanceof Anthropic.APIError && e.error !== undefined
+          ? `error body: ${JSON.stringify(e.error).slice(0, 2000)}\n\n`
+          : "";
+      dump(`request error: ${(e as Error).message}`, body + stackHead(e), []);
+      // The proxy can relay its own upstream's stream-assembly failure as an HTTP
+      // error. That one is transient — the next request usually streams cleanly —
+      // so it is retried even though it has a status.
+      const upstreamOrder = /Unexpected event order/i.test((e as Error).message);
+      if (e instanceof Anthropic.APIError && (status === undefined || upstreamOrder) && !last) {
+        retry(`${status === undefined ? "stream error event" : "upstream stream error"}: ${e.message}`);
+        continue;
+      }
+      throw new Error(`${(e as Error).message}\n  details: ${log}`);
+    }
+  }
 }
 
 /**
@@ -81,25 +216,7 @@ export async function runTurn(
 
   for (let step = 0; step < MAX_STEPS; step++) {
     hooks.onStep?.(step);
-
-    // `thinking` is omitted entirely when off, not sent as {type:"disabled"}: the
-    // base URL may be a proxy serving a non-Claude model that rejects the field.
-    const stream = model.client.messages.stream({
-      model: model.model,
-      max_tokens: model.maxTokens,
-      system,
-      tools,
-      messages,
-      ...(model.thinkingBudget
-        ? { thinking: { type: "enabled" as const, budget_tokens: model.thinkingBudget } }
-        : {}),
-    });
-
-    stream.on("text", (chunk) => hooks.onText(chunk));
-    if (hooks.onThinking) {
-      stream.on("thinking", (chunk) => hooks.onThinking!(chunk));
-    }
-    const response = await stream.finalMessage();
+    const response = await requestStep(model, project, step, { system, tools, messages }, hooks);
 
     const calls = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",

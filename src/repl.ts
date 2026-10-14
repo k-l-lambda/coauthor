@@ -72,7 +72,8 @@ export async function startRepl(project: Project, env?: EnvLoad): Promise<void> 
           `模型 ${model.model} · 思考 ${
             model.thinkingBudget ? `${model.thinkingBudget} tokens` : "关"
           } · 工具 ${TOOLS.map((t) => t.name).join(", ")}` +
-            (env?.path ? ` · 配置 ${ENV_FILE}` : ""),
+            (env?.path ? ` · 配置 ${ENV_FILE}` : "") +
+            (model.debug ? ` · 流日志 ${toPosix(project.streamLogPath)}` : ""),
         ),
       );
       return;
@@ -146,6 +147,11 @@ export async function startRepl(project: Project, env?: EnvLoad): Promise<void> 
           endThinking();
           breakLine();
           console.log(chalk.red(`  ✗ ${name}: ${message.split("\n")[0]}`));
+        },
+        onNotice: (message) => {
+          endThinking();
+          breakLine();
+          console.log(chalk.yellow(`  ! stream: ${message}`));
         },
       });
       process.stdout.write("\n");

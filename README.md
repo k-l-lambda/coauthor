@@ -53,6 +53,7 @@ Put a `.env.local` beside `AGENT.md`, or in the directory you run coauthor from.
 | `COAUTHOR_MODEL` | `claude-sonnet-4-6` | Any model the base URL serves. |
 | `COAUTHOR_MAX_TOKENS` | `8192` | Response cap per model call. |
 | `COAUTHOR_EFFORT` | `off` | Extended-thinking strength: `off`, `low`, `medium`, or `high`. |
+| `COAUTHOR_DEBUG` | off | Trace every model stream to `.coauthor/stream-debug.log.md`, not only broken ones. |
 
 **Only `COAUTHOR_*` is read.** An `ANTHROPIC_*` variable in the shell is ignored, so a
 proxy or model exported for some other tool cannot redirect this project. `baseURL` is
@@ -173,6 +174,21 @@ log under `.coauthor/`: `main.md` uses `main.md.edit-log.md`, while a draft sele
 `chapter-one.md` uses `chapter-one.md.edit-log.md`. `/log` in the REPL shows recent entries
 for the currently selected draft. Review happens after the fact rather than interrupting the
 writing.
+
+## Stream tolerance
+
+Model streams are accumulated by `src/agent/stream.ts`, not the SDK's `MessageStream`,
+whose accumulator throws on the first out-of-order event. Anthropic-compatible proxies
+do emit those — a second `message_start` mid-stream surfaced as
+`Unexpected event order, got message_start before receiving "message_stop"` and lost
+the turn. Now a restarted message replaces the partial one (nothing from it has run
+yet), a trailing message after `message_stop` falls back to the completed one, and a
+tool call whose block never closed is dropped rather than run on partial input.
+
+Each deviation prints a yellow `! stream:` line and appends the raw event trace, HTTP
+status and response headers (including the proxy's request ids) to
+`.coauthor/stream-debug.log.md`. Deltas are folded per block, so a trace stays short.
+The request body and credential are never written.
 
 ## Notes
 
